@@ -27,6 +27,7 @@ namespace BulkCrapUninstaller
 
         private const string MUTEX_NAME = @"Global\BCU-singleinstance";
         private static Mutex _mutex;
+        private static bool _ownsMutex;
 
         [STAThread]
         public static void Main(string[] args)
@@ -35,6 +36,8 @@ namespace BulkCrapUninstaller
 
             using (LogWriter.StartLogging())
             {
+                var startupTimer = Stopwatch.StartNew();
+                Trace.WriteLine("[Startup] Application startup sequence started");
                 try
                 {
                     Directory.SetCurrentDirectory(Program.AssemblyLocation.FullName);
@@ -46,10 +49,12 @@ namespace BulkCrapUninstaller
 
                 try
                 {
+                    Trace.WriteLine("[Startup] Initializing WinForms and startup dependencies");
                     Application.SetCompatibleTextRenderingDefault(false);
                     Application.EnableVisualStyles();
 
                     _mutex = new Mutex(true, MUTEX_NAME, out var createdNew);
+                    _ownsMutex = createdNew;
                     if (!createdNew)
                     {
                         _mutex.Dispose();
@@ -70,18 +75,53 @@ namespace BulkCrapUninstaller
                     else
                         Application.Run(new MainWindow());
                 }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine("[Startup] Fatal startup exception: " + ex);
+                    try
+                    {
+                        PremadeDialogs.GenericError(ex);
+                    }
+                    catch
+                    {
+                        Console.WriteLine(ex);
+                    }
+                }
                 finally
                 {
                     ProcessShutdown();
+                    Trace.WriteLine("[Startup] Application startup sequence finished after " + startupTimer.Elapsed);
                 }
             }
         }
 
         private static void ProcessShutdown()
         {
-            if (!IsRestarting && !_mutex.SafeWaitHandle.IsClosed)
-                _mutex.ReleaseMutex();
-            _mutex.Dispose();
+            var mutex = _mutex;
+            _mutex = null;
+
+            if (mutex != null)
+            {
+                try
+                {
+                    if (!IsRestarting && _ownsMutex)
+                        mutex.ReleaseMutex();
+                }
+                catch (ApplicationException ex)
+                {
+                    Trace.WriteLine("[Startup] Mutex release skipped: " + ex.Message);
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    Trace.WriteLine("[Startup] Mutex was already disposed: " + ex.Message);
+                }
+                finally
+                {
+                    _ownsMutex = false;
+                    mutex.Dispose();
+                }
+            }
+
             // If running as portable, delete any leftovers from the system
             if (!IsRestarting && !Program.IsInstalled && !Program.EnableDebug)
                 Program.StartLogCleaner();
@@ -93,7 +133,11 @@ namespace BulkCrapUninstaller
             {
                 IsRestarting = true;
 
-                _mutex.ReleaseMutex();
+                if (_ownsMutex && _mutex != null && !_mutex.SafeWaitHandle.IsClosed)
+                {
+                    _mutex.ReleaseMutex();
+                    _ownsMutex = false;
+                }
                 Application.Restart();
             }
             catch (Exception ex)

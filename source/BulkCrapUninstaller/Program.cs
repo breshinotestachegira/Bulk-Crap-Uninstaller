@@ -132,7 +132,14 @@ namespace BulkCrapUninstaller
                 else if (ex is not OperationCanceledException)
                     Console.WriteLine(@"Failed to load settings from the config file: " + ex);
 
-                File.Delete(ConfigFileFullname);
+                try
+                {
+                    File.Delete(ConfigFileFullname);
+                }
+                catch (Exception deleteEx)
+                {
+                    Console.WriteLine(@"Failed to reset settings file: " + deleteEx);
+                }
                 Settings.Default.Reload();
             }
 

@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -228,6 +229,8 @@ namespace BulkCrapUninstaller.Functions.ApplicationList
         {
             dialogInterface.SetSubProgressVisible(true);
             var progressMax = 0;
+            var scanTimer = Stopwatch.StartNew();
+            Trace.WriteLine("[Startup] Uninstaller list refresh started");
             var uninstallerEntries = ApplicationUninstallerFactory.GetUninstallerEntries(x =>
             {
                 progressMax = x.TotalCount + 1;
@@ -259,6 +262,7 @@ namespace BulkCrapUninstaller.Functions.ApplicationList
                     x => PathTools.PathsEqual(x.RegistryKeyName, Program.InstalledRegistryKeyName));
 
             AllUninstallers = uninstallerEntries;
+            Trace.WriteLine($"[Startup] Uninstaller list refresh collected {uninstallerEntries.Count} entries in {scanTimer.ElapsedMilliseconds}ms");
 
             dialogInterface.SetSubProgress(1, Localisable.Progress_Finishing_Icons);
             try
