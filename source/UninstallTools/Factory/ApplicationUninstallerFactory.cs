@@ -70,11 +70,13 @@ namespace UninstallTools.Factory
                     var installLocAddProgress = new ListGenerationProgress(currentStep++, totalStepCount, Localisation.Progress_GatherUninstallerInfo);
                     callback(installLocAddProgress);
 
+                    sw.Restart();
                     FactoryThreadedHelpers.GenerateMissingInformation(registryResults, InfoAdder, null, true, report =>
                     {
                         installLocAddProgress.Inner = report;
                         callback(installLocAddProgress);
                     });
+                    Trace.WriteLine($"[Performance] {nameof(FactoryThreadedHelpers)}.{nameof(FactoryThreadedHelpers.GenerateMissingInformation)}(registry-only) took {sw.ElapsedMilliseconds}ms for {registryResults.Count} entries");
                 }
                 else
                 {
@@ -135,11 +137,13 @@ namespace UninstallTools.Factory
 
                 var infoAddProgress = new ListGenerationProgress(currentStep++, totalStepCount, Localisation.Progress_GeneratingInfo);
                 callback(infoAddProgress);
+                var infoAddSw = Stopwatch.StartNew();
                 FactoryThreadedHelpers.GenerateMissingInformation(mergedResults, InfoAdder, msiProducts, false, report =>
                 {
                     infoAddProgress.Inner = report;
                     callback(infoAddProgress);
                 });
+                Trace.WriteLine($"[Performance] {nameof(FactoryThreadedHelpers)}.{nameof(FactoryThreadedHelpers.GenerateMissingInformation)}(full) took {infoAddSw.ElapsedMilliseconds}ms for {mergedResults.Count} entries");
 
                 // Cache missing information to speed up future scans
                 if (UninstallToolsGlobalConfig.UninstallerFactoryCache != null)
@@ -172,6 +176,7 @@ namespace UninstallTools.Factory
                     }
                     catch (Exception ex)
                     {
+                        Trace.WriteLine($"[Factory] Startup provider {factory.Key} failed: {ex}");
                         PremadeDialogs.GenericError(ex);
                     }
                 }
@@ -180,7 +185,9 @@ namespace UninstallTools.Factory
                 callback(startupsProgress);
                 try
                 {
+                    var attachSw = Stopwatch.StartNew();
                     AttachStartupEntries(mergedResults, startupEntries);
+                    Trace.WriteLine($"[Performance] {nameof(AttachStartupEntries)} took {attachSw.ElapsedMilliseconds}ms for {mergedResults.Count} entries");
                 }
                 catch (Exception ex)
                 {
@@ -272,6 +279,7 @@ namespace UninstallTools.Factory
                 }
                 catch (Exception ex)
                 {
+                    Trace.WriteLine($"[Factory] Independent factory {kvp.GetType().Name} failed: {ex}");
                     PremadeDialogs.GenericError(ex);
                 }
             }

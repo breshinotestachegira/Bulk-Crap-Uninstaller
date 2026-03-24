@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using Klocman.Extensions;
@@ -120,7 +121,16 @@ namespace UninstallTools.Factory.InfoAdders
                 if (!infoAdder.AlwaysRun && !infoAdder.CanProduceValueNames.Any(IsValueDefault))
                     continue;
 
-                infoAdder.AddMissingInformation(target);
+                try
+                {
+                    infoAdder.AddMissingInformation(target);
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"[InfoAdders] {infoAdder.GetType().Name} failed for entry [{target?.DisplayName}] - {ex}");
+                    adders.Remove(infoAdder);
+                    continue;
+                }
 
                 adders.Remove(infoAdder);
 

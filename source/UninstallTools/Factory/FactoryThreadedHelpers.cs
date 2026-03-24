@@ -53,11 +53,35 @@ namespace UninstallTools.Factory
             InfoAdderManager infoAdder, IList<Guid> msiProducts, bool skipRunLast, 
             ListGenerationProgress.ListGenerationCallback progressCallback)
         {
+            if (entries == null) throw new ArgumentNullException(nameof(entries));
+
             void WorkLogic(ApplicationUninstallerEntry entry, object state)
             {
-                infoAdder.AddMissingInformation(entry, skipRunLast);
-                if (msiProducts != null)
-                    entry.IsValid = FactoryTools.CheckIsValid(entry, msiProducts);
+                if (entry == null)
+                    return;
+
+                try
+                {
+                    infoAdder.AddMissingInformation(entry, skipRunLast);
+                    if (msiProducts != null)
+                        entry.IsValid = FactoryTools.CheckIsValid(entry, msiProducts);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    var entryLabel = entry.DisplayName;
+                    if (string.IsNullOrWhiteSpace(entryLabel))
+                        entryLabel = entry.RegistryPath;
+                    if (string.IsNullOrWhiteSpace(entryLabel))
+                        entryLabel = entry.RatingId;
+                    if (string.IsNullOrWhiteSpace(entryLabel))
+                        entryLabel = "<unknown>";
+
+                    Trace.WriteLine($@"Failed to generate missing information for [{entryLabel}] - {ex}");
+                }
             }
 
             var workSpreader = new ThreadedWorkSpreader<ApplicationUninstallerEntry, object>(MaxThreadsPerDrive,
