@@ -28,6 +28,7 @@ namespace UninstallTools.Factory
             var currentStep = 1;
 
             var concurrentFactory = new ConcurrentApplicationFactory(GetMiscUninstallerEntries);
+            using var suppressMsiUi = MsiTools.SuppressInstallerUi();
 
             try
             {

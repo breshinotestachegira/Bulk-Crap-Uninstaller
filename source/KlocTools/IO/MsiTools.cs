@@ -11,6 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
 using Klocman.Extensions;
 using Klocman.Native;
 using Klocman.Tools;
@@ -21,6 +22,12 @@ namespace Klocman.IO
     public static class MsiTools
     {
         private static readonly int[] GuidRegistryFormatPattern = { 8, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2 };
+        private static readonly object InstallerUiLock = new();
+
+        public static IDisposable SuppressInstallerUi()
+        {
+            return new InstallerUiScope();
+        }
 
         public static IEnumerable<Guid> MsiEnumProducts()
         {
@@ -234,6 +241,44 @@ namespace Klocman.IO
             // https://learn.microsoft.com/en-us/windows/win32/api/msi/nf-msi-msiqueryproductstatea
             // Default - installed for current user, Absent - installed for another user
             return state is MsiWrapper.INSTALLSTATE.INSTALLSTATE_DEFAULT or MsiWrapper.INSTALLSTATE.INSTALLSTATE_ABSENT;
+        }
+
+        private sealed class InstallerUiScope : IDisposable
+        {
+            private readonly MsiWrapper.INSTALLUILEVEL _previousUiLevel;
+            private IntPtr _previousWindowHandle;
+            private bool _disposed;
+
+            public InstallerUiScope()
+            {
+                Monitor.Enter(InstallerUiLock);
+                try
+                {
+                    _previousWindowHandle = IntPtr.Zero;
+                    _previousUiLevel = MsiWrapper.MsiSetInternalUI(MsiWrapper.INSTALLUILEVEL.INSTALLUILEVEL_NONE, ref _previousWindowHandle);
+                }
+                catch
+                {
+                    Monitor.Exit(InstallerUiLock);
+                    throw;
+                }
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                    return;
+
+                try
+                {
+                    MsiWrapper.MsiSetInternalUI(_previousUiLevel, ref _previousWindowHandle);
+                }
+                finally
+                {
+                    _disposed = true;
+                    Monitor.Exit(InstallerUiLock);
+                }
+            }
         }
     }
 }
