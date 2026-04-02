@@ -7,7 +7,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 
 namespace Klocman.Extensions
 {
@@ -63,5 +66,46 @@ namespace Klocman.Extensions
             // Strip any other invalid data
             return v.SafeNormalize();
         }
+
+        public static bool TryGetLastWriteTime(this RegistryKey key, out DateTime result)
+        {
+            result = DateTime.MinValue;
+
+            if (key == null)
+                return false;
+
+            try
+            {
+                uint classLength = 0;
+                var ret = RegQueryInfoKey(key.Handle, null, ref classLength, IntPtr.Zero,
+                    out _, out _, out _, out _, out _, out _, out _, out var lastWriteTime);
+                if (ret != 0 || (lastWriteTime.dwHighDateTime == 0 && lastWriteTime.dwLowDateTime == 0))
+                    return false;
+
+                var fileTime = ((long)(uint)lastWriteTime.dwHighDateTime << 32) | (uint)lastWriteTime.dwLowDateTime;
+                result = DateTime.FromFileTime(fileTime);
+                return true;
+            }
+            catch
+            {
+                result = DateTime.MinValue;
+                return false;
+            }
+        }
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern int RegQueryInfoKey(
+            SafeRegistryHandle hKey,
+            string lpClass,
+            ref uint lpcbClass,
+            IntPtr lpReserved,
+            out uint lpcSubKeys,
+            out uint lpcbMaxSubKeyLen,
+            out uint lpcbMaxClassLen,
+            out uint lpcValues,
+            out uint lpcbMaxValueNameLen,
+            out uint lpcbMaxValueLen,
+            out uint lpcbSecurityDescriptor,
+            out FILETIME lpftLastWriteTime);
     }
 }

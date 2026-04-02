@@ -5,6 +5,8 @@
 
 using System;
 using System.IO;
+using Klocman.Extensions;
+using Klocman.Tools;
 
 namespace UninstallTools.Factory.InfoAdders
 {
@@ -12,20 +14,14 @@ namespace UninstallTools.Factory.InfoAdders
     {
         public void AddMissingInformation(ApplicationUninstallerEntry target)
         {
-            try
-            {
-                if (File.Exists(target.UninstallerFullFilename))
-                    target.InstallDate = File.GetCreationTime(target.UninstallerFullFilename);
-                else if (Directory.Exists(target.InstallLocation))
-                    target.InstallDate = Directory.GetCreationTime(target.InstallLocation);
-            }
-            catch
-            {
+            if (TryGetRegistryInstallDate(target, out var installDate) || TryGetFilesystemInstallDate(target, out installDate))
+                target.InstallDate = installDate;
+            else
                 target.InstallDate = DateTime.MinValue;
-            }
         }
 
         public string[] RequiredValueNames { get; } = {
+            nameof(ApplicationUninstallerEntry.RegistryPath),
             nameof(ApplicationUninstallerEntry.InstallLocation),
             nameof(ApplicationUninstallerEntry.UninstallerFullFilename)
         };
@@ -37,5 +33,50 @@ namespace UninstallTools.Factory.InfoAdders
         };
 
         public InfoAdderPriority Priority { get; } = InfoAdderPriority.RunLast;
+
+        private static bool TryGetFilesystemInstallDate(ApplicationUninstallerEntry target, out DateTime result)
+        {
+            result = DateTime.MinValue;
+
+            try
+            {
+                if (Directory.Exists(target.InstallLocation))
+                {
+                    result = Directory.GetCreationTime(target.InstallLocation);
+                    return true;
+                }
+
+                if (File.Exists(target.UninstallerFullFilename))
+                {
+                    result = File.GetCreationTime(target.UninstallerFullFilename);
+                    return true;
+                }
+            }
+            catch
+            {
+                result = DateTime.MinValue;
+            }
+
+            return false;
+        }
+
+        private static bool TryGetRegistryInstallDate(ApplicationUninstallerEntry target, out DateTime result)
+        {
+            result = DateTime.MinValue;
+
+            if (string.IsNullOrWhiteSpace(target.RegistryPath))
+                return false;
+
+            try
+            {
+                using var key = RegistryTools.OpenRegistryKey(target.RegistryPath);
+                return key != null && key.TryGetLastWriteTime(out result);
+            }
+            catch
+            {
+                result = DateTime.MinValue;
+                return false;
+            }
+        }
     }
 }
